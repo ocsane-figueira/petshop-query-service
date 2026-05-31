@@ -1,69 +1,119 @@
-# query-service
+# 🔍 Petshop Query Service (`petshop-query-service`)
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+Este repositório contém o **Microsserviço de Consulta** da arquitetura distribuída do Petshop. Ele representa o lado de **Leitura (Query)** no padrão CQRS (Command Query Responsibility Segregation).
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+---
 
-## Running the application in dev mode
+## 🏗️ Papel e Funcionalidade no Ecossistema
 
-You can run your application in dev mode that enables live coding using:
+O `query-service` é responsável pela consolidação e entrega de dados prontos e desnormalizados para o frontend/consumidores:
+1. **Domínio de Leitura Ultra Rápida**: Em vez de fazer junções (`JOINs`) pesadas em tempo de execução entre tabelas relacionais de bancos diferentes, este serviço entrega dados de leitura instantânea estruturados como documentos JSON.
+2. **Persistência de Alto Desempenho**: Utiliza **MongoDB** (NoSQL orientado a documentos) para salvar views consolidadas.
+   * **Ambiente DEV**: Conecta-se ao cluster de desenvolvimento MongoDB.
+   * **Ambiente HOMOL/PROD**: Conecta-se ao cluster de homologação/produção MongoDB.
+3. **Consumo de Eventos Reativos (Sincronização CQRS)**: O serviço escuta constantemente as filas declaradas no **RabbitMQ**. Conforme eventos ocorrem nos microsserviços de escrita (Commands), o `query-service` os consome e atualiza sua base NoSQL:
+   * **`ClientCreatedEvent`**: Adiciona ou atualiza dados desnormalizados do cliente.
+   * **`AnimalCreatedEvent`**: Adiciona ou atualiza dados do pet mapeados.
+   * **`AppointmentScheduledEvent`**: Captura o evento de agendamento, busca as referências salvas de cliente e animal e monta um documento unificado e rico chamado `AppointmentViewDocument` (contendo dados do agendamento + nome do cliente + nome do animal) gravando-o no MongoDB.
+   * **`AppointmentCancelledEvent`**: Remove a view correspondente do MongoDB de forma automática.
 
-```shell script
+---
+
+## 🛠️ Tecnologias Principais
+
+* **Java 21** e **Quarkus Framework**
+* **MongoDB Client** (Integração otimizada para banco NoSQL)
+* **SmallRye Reactive Messaging - RabbitMQ Connector** (Consumo reativo de filas assíncronas)
+* **Jackson** (Processamento e serialização de documentos JSON de alta velocidade)
+* **Quarkus Micrometer & Prometheus Registry** (Telemetria)
+
+---
+
+## 💻 Como Rodar o Serviço Localmente
+
+### Pré-requisitos
+* Java 21 JDK instalado localmente
+* Maven instalado localmente (ou use o `./mvnw` incluso)
+* Docker ativo para executar as bases de dados de suporte locais (consulte o repositório `petshop-infra`)
+
+### Executando em Modo de Desenvolvimento (Live Coding)
+
+Para iniciar o Quarkus localmente, conectado ao MongoDB e RabbitMQ rodando no Docker local:
+
+```bash
 ./mvnw compile quarkus:dev
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+* **Porta local padrão**: `8084`
+* **Painel Dev UI do Quarkus**: `http://localhost:8084/q/dev/`
 
-## Packaging and running the application
+---
 
-The application can be packaged using:
+## 🧪 Testes Automatizados e Ajustes de Configuração
 
-```shell script
-./mvnw package
+O projeto possui suíte de testes unitários e de integração utilizando **JUnit 5**, **Mockito** e **RestAssured**:
+
+### Executar Testes Locais
+```bash
+./mvnw clean verify
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+O Jacoco gerará o relatório visual em `target/jacoco-report/index.html` para auditar a cobertura de código (exigido mínimo de **50%** de cobertura).
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+---
 
-If you want to build an _über-jar_, execute the following command:
+## 🎛️ Observabilidade
 
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
-```
+O serviço expõe telemetria rica em tempo real para monitoramento corporativo:
+* **Endpoint de Métricas**: `GET http://localhost:8084/q/metrics`
+* Expõe estatísticas de consumo de mensagens por segundo do RabbitMQ, latências de escrita/leitura no MongoDB, tempos de resposta HTTP e métricas de sistema JVM.
+* **Integração**: Coletado pelo Prometheus e encaminhado ao Grafana Cloud via `remote_write`.
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+---
 
-## Creating a native executable
+## 📖 Documentação da API (Swagger / OpenAPI)
 
-You can create a native executable using:
+O microsserviço está configurado com suporte nativo ao **Swagger UI** e geração de especificação **OpenAPI** via extensão `quarkus-smallrye-openapi`.
 
-```shell script
-./mvnw package -Dnative
-```
+### 🌐 Endpoints de Acesso em Desenvolvimento (DEV)
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+Em ambiente de desenvolvimento (local ou na nuvem), você pode acessar a documentação diretamente no microsserviço (completamente independente do API Gateway):
 
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
+* **Swagger UI (Interface Visual)**: `http://localhost:8083/q/swagger-ui/`
+  * No Render (DEV): [https://petshop-query-service-dev.onrender.com/q/swagger-ui/](https://petshop-query-service-dev.onrender.com/q/swagger-ui/)
+* **OpenAPI Spec (Esquema JSON)**: `http://localhost:8083/q/openapi`
+  * No Render (DEV): [https://petshop-query-service-dev.onrender.com/q/openapi](https://petshop-query-service-dev.onrender.com/q/openapi)
 
-You can then execute your native executable with: `./target/query-service-1.0.0-SNAPSHOT-runner`
+### 🔒 Controle de Ambientes e Segurança
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
+Para alinhar segurança e performance em produção/homologação, a exibição da documentação segue esta estratégia:
 
-## Related Guides
+1. **Inclusão na Compilação (`Build Time`)**:
+   A propriedade `quarkus.swagger-ui.always-include=true` está configurada no arquivo principal `application.properties`. Isso garante que o Quarkus compile e empacote os arquivos estáticos do Swagger no JAR de produção gerado no Dockerfile.
+2. **Bloqueio em Homologação/Produção (`Runtime`)**:
+   Para evitar a exposição pública indesejada de ferramentas de teste, o Swagger é desativado em tempo de execução no perfil de homologação através da propriedade:
+   ```properties
+   %homol.quarkus.swagger-ui.enable=false
+   ```
+   Qualquer tentativa de acesso fora do ambiente DEV retornará erro `404 Not Found`.
 
-- Messaging - RabbitMQ Connector ([guide](https://quarkus.io/guides/rabbitmq)): Connect to RabbitMQ with Reactive Messaging
-- REST ([guide](https://quarkus.io/guides/rest)): A Jakarta REST implementation utilizing build time processing and Vert.x. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it.
-- MongoDB with Panache ([guide](https://quarkus.io/guides/mongodb-panache)): Simplify your persistence code for MongoDB via the active record or the repository pattern
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
+---
 
-## Provided Code
+## 🚀 Pipeline de CI/CD (GitHub Actions)
 
-### REST
+Este repositório possui fluxos totalmente automatizados integrando as melhores práticas DevOps:
 
-Easily start your REST Web Services
+1. **Continuous Integration (`ci.yml`)**:
+   * Executado a cada push/pull request para as branches `main` e `develop`.
+   * Realiza a compilação e validação do código com Java 21.
+   * Envia análises de qualidade estática para o **SonarCloud** (Project Key: `ocsane-figueira_petshop-query-service`).
+   * Para pushes aprovados em `main`, constrói a imagem Docker oficial multi-stage e envia para o Docker Hub com tags SHA e `main` (`ocsane/petshop-query-service`).
 
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+2. **Automatic Release (`release.yml`)**:
+   * Executado na branch `main` pós-CI bem-sucedido.
+   * Utiliza **Semantic Release** para analisar commits convencionais e atualizar o SemVer no GitHub automaticamente.
+
+3. **Continuous Deployment (`cd.yml`)**:
+   * O fluxo monitora a conclusão do CI. Caso a validação de testes finalize com sucesso:
+     * Branch `develop`: Invoca o webhook do Render para atualizar o ambiente de desenvolvimento (`petshop-query-service-dev`).
+     * Branch `main`: Invoca o webhook do Render para atualizar o ambiente de produção (`petshop-query-service`).
