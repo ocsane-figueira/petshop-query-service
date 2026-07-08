@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: query-config
+  namespace: petshop-apps
+data:
+  QUARKUS_HTTP_PORT: "8080"
+  MONGODB_HOST: "mongodb-service.petshop-infra.svc.cluster.local"
+  MONGODB_PORT: "27017"
+  MONGODB_DATABASE: "petshop_query_db"
+  RABBITMQ_HOST: "rabbitmq-service.petshop-infra.svc.cluster.local"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_VIRTUAL_HOST: "/"
+  RABBITMQ_SSL: "false"
